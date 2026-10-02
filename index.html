@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PDF Editor</title>
+<style>
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  body {
+    margin: 0; padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: #f2f3f5; color: #1a1a1a;
+    padding-bottom: 90px;
+  }
+  header {
+    background: #2b3a55; color: #fff;
+    padding: 14px 16px; position: sticky; top: 0; z-index: 100;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+  header h1 { margin: 0; font-size: 17px; font-weight: 600; }
+  header .sub { font-size: 12px; opacity: 0.8; margin-top: 2px; }
+  .controls {
+    background: #fff; padding: 12px 14px;
+    border-bottom: 1px solid #e2e4e8;
+    position: sticky; top: 58px; z-index: 99;
+  }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+  .row:last-child { margin-bottom: 0; }
+  button {
+    font-family: inherit; font-size: 13px;
+    padding: 8px 12px; border-radius: 8px;
+    border: 1px solid #c8ccd4; background: #fff;
+    color: #2b3a55; font-weight: 500;
+    cursor: pointer; flex: 0 0 auto;
+  }
+  button:active { background: #e9ecf1; }
+  button.primary {
+    background: #2b3a55; color: #fff; border-color: #2b3a55;
+    font-weight: 600;
+  }
+  button.primary:active { background: #1f2c42; }
+  button.warn {
+    background: #fff; color: #b03030; border-color: #e0b8b8;
+  }
+  button:disabled {
+    opacity: 0.4; cursor: not-allowed;
+  }
+  input[type="text"] {
+    font-family: inherit; font-size: 13px;
+    padding: 8px 10px; border-radius: 8px;
+    border: 1px solid #c8ccd4; flex: 1 1 auto;
+    min-width: 150px;
+  }
+  #countInfo {
+    font-size: 12px; color: #555;
+    padding: 6px 14px 0;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+    gap: 12px;
+    padding: 14px;
+  }
+  .page-card {
+    background: #fff; border-radius: 10px;
+    border: 3px solid transparent;
+    overflow: hidden; position: relative;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+    transition: border-color 0.12s, transform 0.12s;
+  }
+  .page-card.selected {
+    border-color: #2f7d4f;
+    box-shadow: 0 0 0 2px rgba(47,125,79,0.15), 0 2px 8px rgba(0,0,0,0.12);
+  }
+  .page-card .canvas-wrap {
+    width: 100%; aspect-ratio: 0.77;
+    background: #eaecef; display: flex;
+    align-items: center; justify-content: center;
+    overflow: hidden;
+  }
+  .page-card canvas {
+    max-width: 100%; max-height: 100%;
+    display: block; transition: transform 0.15s;
+  }
+  .page-card .label {
+    text-align: center; font-size: 12px;
+    padding: 6px 4px; color: #444;
+    font-weight: 500;
+  }
+  .page-card .badge {
+    position: absolute; top: 6px; left: 6px;
+    background: #2f7d4f; color: #fff;
+    font-size: 11px; font-weight: 700;
+    padding: 2px 7px; border-radius: 10px;
+    display: none;
+  }
+  .page-card.selected .badge { display: block; }
+  .page-card .rotate-btn {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(43,58,85,0.85); color: #fff;
+    border: none; border-radius: 6px;
+    width: 28px; height: 28px; font-size: 15px;
+    line-height: 1; padding: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .empty-state {
+    text-align: center; padding: 60px 24px; color: #666;
+  }
+  .empty-state .big {
+    font-size: 42px; margin-bottom: 12px;
+  }
+  .empty-state p { font-size: 14px; line-height: 1.5; margin: 6px 0; }
+  footer {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    background: #fff; padding: 12px 14px;
+    border-top: 1px solid #e2e4e8;
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.06);
+    display: flex; gap: 10px; align-items: center;
+    z-index: 100;
+  }
+  footer .status { flex: 1; font-size: 12px; color: #555; }
+  footer button { flex: 0 0 auto; }
+  #toast {
+    position: fixed; bottom: 100px; left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: #2b3a55; color: #fff;
+    padding: 10px 18px; border-radius: 20px;
+    font-size: 13px; opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s, transform 0.25s;
+    z-index: 200; max-width: 90vw; text-align: center;
+  }
+  #toast.show {
+    opacity: 1; transform: translateX(-50%) translateY(0);
+  }
+  .loading-overlay {
+    position: fixed; inset: 0;
+    background: rgba(255,255,255,0.9);
+    display: none; align-items: center; justify-content: center;
+    flex-direction: column; z-index: 300;
+  }
+  .loading-overlay.show { display: flex; }
+  .spinner {
+    width: 36px; height: 36px;
+    border: 4px solid #d5d9e0;
+    border-top-color: #2b3a55;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-overlay p {
+    margin-top: 14px; font-size: 14px; color: #2b3a55;
+    font-weight: 500;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>PDF Editor</h1>
+  <div class="sub">Pick, rearrange, and export pages — everything stays on your phone.</div>
+</header>
+
+<div class="controls">
+  <div class="row">
+    <button id="openBtn" class="primary">📂 Open PDF</button>
+    <button id="selectAllBtn" disabled>Select all</button>
+    <button id="selectOddBtn" disabled>Select odd</button>
+    <button id="selectEvenBtn" disabled>Select even</button>
+    <button id="clearBtn" class="warn" disabled>Clear</button>
+  </div>
+  <div class="row">
+    <input type="text" id="orderInput" placeholder="Type order e.g. 3,1,5,2 or 4-8" disabled>
+    <button id="applyOrderBtn" disabled>Apply order</button>
+  </div>
+  <div id="countInfo"></div>
+</div>
+
+<div id="emptyState" class="empty-state">
+  <div class="big">📄</div>
+  <p><strong>No PDF loaded yet</strong></p>
+  <p>Tap "Open PDF" to choose a file from your phone.</p>
+</div>
+
+<div id="grid" class="grid"></div>
+
+<footer>
+  <div class="status" id="status">Ready.</div>
+  <button id="exportBtn" class="primary" disabled>💾 Export new PDF</button>
+</footer>
+
+<div id="toast"></div>
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p id="loadingText">Loading…</p>
+</div>
+
+<input type="file" id="fileInput" accept="application/pdf" style="display:none">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- State ----------
+  var originalBytes = null;        // ArrayBuffer of the loaded PDF
+  var pageCount = 0;
+  var selected = [];               // array of original page indices (0-based), in the desired output order
+  var rotations = {};              // pageIndex -> degrees (0/90/180/270)
+  var pdfjsDoc = null;
+
+  // ---------- Elements ----------
+  var fileInput   = document.getElementById('fileInput');
+  var openBtn     = document.getElementById('openBtn');
+  var selectAllBtn= document.getElementById('selectAllBtn');
+  var selectOddBtn= document.getElementById('selectOddBtn');
+  var selectEvenBtn=document.getElementById('selectEvenBtn');
+  var clearBtn    = document.getElementById('clearBtn');
+  var orderInput  = document.getElementById('orderInput');
+  var applyOrderBtn=document.getElementById('applyOrderBtn');
+  var exportBtn   = document.getElementById('exportBtn');
+  var grid        = document.getElementById('grid');
+  var emptyState  = document.getElementById('emptyState');
+  var countInfo   = document.getElementById('countInfo');
+  var statusEl    = document.getElementById('status');
+  var toastEl     = document.getElementById('toast');
+  var overlay     = document.getElementById('loadingOverlay');
+  var loadingText = document.getElementById('loadingText');
+
+  // ---------- Helpers ----------
+  function showToast(msg, ms) {
+    toastEl.textContent = msg;
+    toastEl.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(function () {
+      toastEl.classList.remove('show');
+    }, ms || 2000);
+  }
+
+  function showLoading(txt) {
+    loadingText.textContent = txt || 'Loading…';
+    overlay.classList.add('show');
+  }
+  function hideLoading() {
+    overlay.classList.remove('show');
+  }
+
+  function setStatus(txt) {
+    statusEl.textContent = txt;
+  }
+
+  function updateCount() {
+    if (pageCount === 0) {
+      countInfo.textContent = '';
+      return;
+    }
+    countInfo.textContent = selected.length + ' of ' + pageCount + ' pages selected';
+  }
+
+  function updateButtons() {
+    var has = pageCount > 0;
+    selectAllBtn.disabled  = !has;
+    selectOddBtn.disabled  = !has;
+    selectEvenBtn.disabled = !has;
+    clearBtn.disabled      = !has || selected.length === 0;
+    orderInput.disabled    = !has;
+    applyOrderBtn.disabled = !has;
+    exportBtn.disabled     = selected.length === 0;
+  }
+
+  // ---------- File open ----------
+  openBtn.addEventListener('click', function () {
+    fileInput.value = '';
+    fileInput.click();
+  });
+
+  fileInput.addEventListener('change', function (e) {
+    var file = e.target.files && e.target.files[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      showToast('Please choose a PDF file.');
+      return;
+    }
+    loadPdf(file);
+  });
+
+  function loadPdf(file) {
+    showLoading('Reading PDF…');
+    var reader = new FileReader();
+    reader.onload = function () {
+      originalBytes = reader.result;
+      // reset state
+      selected = [];
+      rotations = {};
+      grid.innerHTML = '';
+      if (pdfjsDoc && pdfjsDoc.destroy) {
+        try { pdfjsDoc.destroy(); } catch (e) {}
+      }
+      pdfjsDoc = null;
+      renderPdf();
+    };
+    reader.onerror = function () {
+      hideLoading();
+      showToast('Could not read the file.');
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function renderPdf() {
+    setStatus('Rendering thumbnails…');
+    var loadingTask = pdfjsLib.getDocument({ data: originalBytes.slice(0) });
+    loadingTask.promise.then(function (pdf) {
+      pdfjsDoc = pdf;
+      pageCount = pdf.numPages;
+      emptyState.style.display = 'none';
+
+      // Render thumbnails one by one
+      var i = 1;
+      function next() {
+        if (i > pageCount) {
+          hideLoading();
+          setStatus('Ready. Tap pages to select.');
+          updateCount();
+          updateButtons();
+          return;
+        }
+        loadingText.textContent = 'Rendering page ' + i + ' of ' + pageCount + '…';
+        pdf.getPage(i).then(function (page) {
+          renderThumb(page, i - 1);
+          i++;
+          // Yield to the UI
+          setTimeout(next, 0);
+        }).catch(function (err) {
+          console.error('Page render error', err);
+          i++;
+          setTimeout(next, 0);
+        });
+      }
+      next();
+    }).catch(function (err) {
+      hideLoading();
+      console.error(err);
+      showToast('Could not open the PDF.');
+      setStatus('Failed to open PDF.');
+    });
+  }
+
+  function renderThumb(page, pageIndex) {
+    var viewport = page.getViewport({ scale: 1 });
+    // Target width ~220px for crispness on retina; card width ~110-160px
+    var targetWidth = 220;
+    var scale = targetWidth / viewport.width;
+    var scaled = page.getViewport({ scale: scale });
+
+    var canvas = document.createElement('canvas');
+    var ctx = canvas.getContext('2d');
+    canvas.width = Math.floor(scaled.width);
+    canvas.height = Math.floor(scaled.height);
+
+    var card = document.createElement('div');
+    card.className = 'page-card';
+    card.dataset.index = String(pageIndex);
+
+    var wrap = document.createElement('div');
+    wrap.className = 'canvas-wrap';
+    wrap.appendChild(canvas);
+
+    var badge = document.createElement('div');
+    badge.className = 'badge';
+    badge.textContent = '✓';
+
+    var rotBtn = document.createElement('button');
+    rotBtn.className = 'rotate-btn';
+    rotBtn.textContent = '⟳';
+    rotBtn.title = 'Rotate 90°';
+    rotBtn.addEventListener('click', function (ev) {
+      ev.stopPropagation();
+      rotations[pageIndex] = ((rotations[pageIndex] || 0) + 90) % 360;
+      canvas.style.transform = 'rotate(' + rotations[pageIndex] + 'deg)';
+    });
+
+    var label = document.createElement('div');
+    label.className = 'label';
+    label.textContent = 'Page ' + (pageIndex + 1);
+
+    card.appendChild(wrap);
+    card.appendChild(badge);
+    card.appendChild(rotBtn);
+    card.appendChild(label);
+
+    card.addEventListener('click', function () {
+      toggleSelect(pageIndex);
+    });
+
+    grid.appendChild(card);
+
+    page.render({ canvasContext: ctx, viewport: scaled }).promise.catch(function (e) {
+      console.error('render fail', e);
+    });
+  }
+
+  // ---------- Selection ----------
+  function toggleSelect(pageIndex) {
+    var pos = selected.indexOf(pageIndex);
+    if (pos === -1) {
+      // Append in original page order relative to current selection isn't required;
+      // simply append at end. But nicer: insert so the list stays sorted by page
+      // only if user hasn't manually reordered. We'll just append and let user reorder.
+      selected.push(pageIndex);
+    } else {
+      selected.splice(pos, 1);
+    }
+    refreshCardSelection();
+    updateCount();
+    updateButtons();
+  }
+
+  function refreshCardSelection() {
+    var cards = grid.querySelectorAll('.page-card');
+    for (var i = 0; i < cards.length; i++) {
+      var idx = parseInt(cards[i].dataset.index, 10);
+      var isSel = selected.indexOf(idx) !== -1;
+      cards[i].classList.toggle('selected', isSel);
+      var badge = cards[i].querySelector('.badge');
+      if (badge) {
+        if (isSel) {
+          var pos = selected.indexOf(idx) + 1;
+          badge.textContent = pos;
+        } else {
+          badge.textContent = '';
+        }
+      }
+    }
+  }
+
+  selectAllBtn.addEventListener('click', function () {
+    selected = [];
+    for (var i = 0; i < pageCount; i++) selected.push(i);
+    refreshCardSelection();
+    updateCount();
+    updateButtons();
+    showToast('All pages selected');
+  });
+
+  selectOddBtn.addEventListener('click', function () {
+    // "Odd pages" = page 1,3,5,... (1-based) => index 0,2,4,...
+    selected = [];
+    for (var i = 0; i < pageCount; i++) {
+      if ((i + 1) % 2 === 1) selected.push(i);
+    }
+    refreshCardSelection();
+    updateCount();
+    updateButtons();
+    showToast('Odd pages selected');
+  });
+
+  selectEvenBtn.addEventListener('click', function () {
+    selected = [];
+    for (var i = 0; i < pageCount; i++) {
+      if ((i + 1) % 2 === 0) selected.push(i);
+    }
+    refreshCardSelection();
+    updateCount();
+    updateButtons();
+    showToast('Even pages selected');
+  });
+
+  clearBtn.addEventListener('click', function () {
+    selected = [];
+    refreshCardSelection();
+    updateCount();
+    updateButtons();
+    showToast('Selection cleared');
+  });
+
+  // ---------- Apply typed order ----------
+  applyOrderBtn.addEventListener('click', function () {
+    var raw = orderInput.value.trim();
+    if (!raw) { showToast('Type an order first.'); return; }
+    var indices = parseOrder(raw, pageCount);
+    if (!indices) {
+      showToast('Could not understand that. Use e.g. 3,1,5,2 or 4-8');
+      return;
+    }
+    selected = indices;
+    refreshCardSelection();
+    updateCount();
+    updateButtons();
+    showToast('Order applied');
+  });
+
+  // Parse strings like "3,1,5,2" or "4-8" or "1,3-5,7"
+  function parseOrder(str, total) {
+    var parts = str.split(/[,\s]+/).filter(Boolean);
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+      var p = parts[i];
+      var rangeMatch = p.match(/^(\d+)\s*-\s*(\d+)$/);
+      if (rangeMatch) {
+        var a = parseInt(rangeMatch[1], 10);
+        var b = parseInt(rangeMatch[2], 10);
+        if (a > b) { var t = a; a = b; b = t; }
+        for (var n = a; n <= b; n++) {
+          if (n >= 1 && n <= total) out.push(n - 1);
+        }
+      } else if (/^\d+$/.test(p)) {
+        var num = parseInt(p, 10);
+        if (num >= 1 && num <= total) out.push(num - 1);
+      } else {
+        return null;
+      }
+    }
+    return out;
+  }
+
+  // ---------- Export ----------
+  exportBtn.addEventListener('click', function () {
+    if (!selected.length) { showToast('Select at least one page.'); return; }
+    showLoading('Building new PDF…');
+    setTimeout(doExport, 50);
+  });
+
+  function doExport() {
+    try {
+      var srcDoc = PDFLib.PDFDocument.load(originalBytes.slice(0));
+      srcDoc = srcDoc; // promise below
+      PDFLib.PDFDocument.load(originalBytes.slice(0)).then(function (srcPdf) {
+        var newPdf = PDFLib.PDFDocument.create();
+        // Copy pages one by one in the requested order
+        var copyChain = Promise.resolve();
+        var copiedPages = [];
+
+        selected.forEach(function (pageIndex) {
+          copyChain = copyChain.then(function () {
+            return newPdf.copyPages(srcPdf, [pageIndex]).then(function (pages) {
+              var p = pages[0];
+              // Apply rotation
+              var rot = rotations[pageIndex] || 0;
+              if (rot) {
+                var current = p.getRotation().angle || 0;
+                p.setRotation(PDFLib.degrees((current + rot) % 360));
+              }
+              newPdf.addPage(p);
+              copiedPages.push(p);
+            });
+          });
+        });
+
+        return copyChain.then(function () {
+          return newPdf.save();
+        });
+      }).then(function (bytes) {
+        var blob = new Blob([bytes], { type: 'application/pdf' });
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        var name = 'edited_' + Date.now() + '.pdf';
+        a.download = name;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(url); }, 5000);
+        hideLoading();
+        setStatus('Exported: ' + name);
+        showToast('New PDF saved to Downloads');
+      }).catch(function (err) {
+        hideLoading();
+        console.error(err);
+        showToast('Export failed. Try again.');
+        setStatus('Export failed.');
+      });
+    } catch (err) {
+      hideLoading();
+      console.error(err);
+      showToast('Export failed.');
+    }
+  }
+
+  // ---------- Init ----------
+  updateCount();
+  updateButtons();
+})();
+</script>
+</body>
+</html>
